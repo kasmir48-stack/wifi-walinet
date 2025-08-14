@@ -497,20 +497,29 @@
     // Service worker
     if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js')); }
   </script>
-  <!-- OVERRIDE: API helper tanpa preflight (fix CORS) -->
+<!-- OVERRIDE: API helper tanpa preflight (pakai form-urlencoded) -->
 <script>
   async function api(path, body = {}) {
     const session = JSON.parse(localStorage.getItem("session") || "{}");
-    body["X-API-KEY"] = window.APP_CONFIG.API_KEY;
+
+    // Bangun payload sebagai form (string)
+    const form = new URLSearchParams();
+    form.append("op", (path.split("?op=")[1] || "").trim() || (body.op || ""));
+    form.append("X-API-KEY", window.APP_CONFIG.API_KEY);
     if (session.role) {
-      body["X-ROLE"] = session.role;
-      body["X-USER"] = session.user || "";
+      form.append("X-ROLE", session.role);
+      form.append("X-USER", session.user || "");
     }
-    // KIRIM sebagai text/plain agar tidak kena preflight CORS
-    const res = await fetch(window.APP_CONFIG.API_BASE + path, {
+    // masukkan field body lain
+    for (const [k, v] of Object.entries(body)) {
+      if (k === "op") continue;
+      form.append(k, typeof v === "object" ? JSON.stringify(v) : String(v));
+    }
+
+    const res = await fetch(window.APP_CONFIG.API_BASE + (path.startsWith("?") ? path : ("?"+path)), {
       method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(body)
+      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+      body: form.toString()
     });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
@@ -518,6 +527,7 @@
 </script>
 </body>
 </html>
+
 
 
 
