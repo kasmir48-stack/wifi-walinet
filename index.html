@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tagihan WiFi — Satu URL + Login Kode</title>
+  <meta name="theme-color" content="#0ea5e9">
+  <link rel="manifest" href="manifest.webmanifest">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{--brand:#0ea5e9}
+    .gradient-bg{background:linear-gradient(135deg,#0ea5e9,#0369a1)}
+    .card{border:1px solid rgba(255,255,255,.08); border-radius:16px; background:#0b1220; color:#e5e7eb}
+    body{background:#0b1220;color:#e5e7eb}
+    .muted{color:#94a3b8}
+    .btn{background:var(--brand); color:#001d2a; border-radius:10px; padding:.625rem .875rem; font-weight:700}
+    .btn-ghost{border:1px solid rgba(255,255,255,.1); background:transparent; color:#e5e7eb; border-radius:10px; padding:.625rem .875rem}
+    input,select,textarea{background:#0b1220;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:.625rem;color:#e5e7eb}
+    .tab.active{background:var(--brand); color:#001d2a; font-weight:700}
+    .full{min-height:calc(100vh - 64px)}
+    .hidden{display:none}
+  </style>
+  <script>
+    window.APP_CONFIG = {
+      API_BASE: "https://script.google.com/macros/s/AKfycbwmpZeeLxvm3bo28UrzJArRYxdUOO4AHH1d3hKMMiwToqh3yz-i_y6yrYIlyNpq2w7Uhw/exec",
+      API_KEY: "gemilang",
+      BRAND: "Wali.Net"
+    };
+  </script>
+</head>
+<body class="min-h-screen">
+  <nav class="gradient-bg text-white p-4 sticky top-0 z-40">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <i class="fa-solid fa-wifi text-xl"></i>
+        <span class="font-bold">Tagihan WiFi</span>
+        <span class="text-xs bg-black/20 px-2 py-0.5 rounded">Satu URL</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="operatorLabel" class="text-sm opacity-90"></span>
+        <button id="btnInstall" class="btn-ghost">Instal</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- LOGIN -->
+  <section id="screen-login" class="full flex items-center justify-center p-6">
+    <div class="card p-6 max-w-md w-full">
+      <h1 class="text-xl font-bold mb-1">Masuk</h1>
+      <p class="muted text-sm mb-4">Masukkan <b>kode</b> Anda:<br>• <i>Admin/Operator</i>: kode admin masing-masing.<br>• <i>Pelanggan</i>: <b>ID Pelanggan</b> (PIN = ID).</p>
+      <form id="formLogin" class="grid gap-3">
+        <label class="grid gap-1">
+          <span class="muted text-sm">Kode</span>
+          <input id="loginCode" placeholder="contoh: ADM-1234 atau WLN-001" required>
+        </label>
+        <button class="btn" type="submit">Masuk</button>
+        <div id="loginError" class="text-red-400 text-sm"></div>
+      </form>
+      <div class="text-xs muted mt-4">Brand: <span id="brand"></span></div>
+    </div>
+  </section>
+
+  <!-- ADMIN APP -->
+  <section id="screen-admin" class="hidden">
+    <div class="max-w-6xl mx-auto px-4 py-4 grid gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
+        <button class="tab btn-ghost" data-tab="dashboard">Dasbor</button>
+        <button class="tab btn-ghost" data-tab="pelanggan">Pelanggan</button>
+        <button class="tab btn-ghost" data-tab="tagihan">Tagihan</button>
+        <button class="tab btn-ghost" data-tab="pembayaran">Pembayaran</button>
+        <button class="tab btn-ghost" data-tab="laporan">Laporan</button>
+        <button class="tab btn-ghost" data-tab="setting">Setting</button>
+      </div>
+
+      <section id="panel-dashboard" class="card p-4">
+        <h2 class="text-lg font-semibold mb-3">Ringkasan</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="p-4 rounded-xl border border-white/10"><div class="muted text-sm">Pelanggan</div><div id="statPelanggan" class="text-2xl font-bold">0</div></div>
+          <div class="p-4 rounded-xl border border-white/10"><div class="muted text-sm">Tagihan Aktif</div><div id="statTagihan" class="text-2xl font-bold">0</div></div>
+          <div class="p-4 rounded-xl border border-white/10"><div class="muted text-sm">Tertagih (bulan ini)</div><div id="statTertagih" class="text-2xl font-bold">Rp0</div></div>
+        </div>
+        <div class="mt-4"><canvas id="chartBulanan" height="120"></canvas></div>
+        <div class="text-xs mt-3 muted">Sinkron terakhir: <span id="lastSync">-</span></div>
+      </section>
+
+      <section id="panel-pelanggan" class="card p-4 hidden">
+        <h2 class="text-lg font-semibold mb-2">Pelanggan</h2>
+        <div class="flex flex-wrap gap-2 mb-3">
+          <button id="btnExportPelanggan" class="btn"><i class="fa fa-download mr-2"></i>Export CSV</button>
+          <button id="btnTemplatePelanggan" class="btn-ghost"><i class="fa fa-file mr-2"></i>Unduh Template</button>
+          <label class="btn-ghost cursor-pointer">
+            <i class="fa fa-upload mr-2"></i>Import CSV
+            <input id="fileImportPelanggan" type="file" accept=".csv" class="hidden">
+          </label>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-3">
+          <form id="formPelanggan" class="grid gap-2">
+            <label class="grid gap-1"><span class="muted text-sm">ID Pelanggan</span><input name="id" required placeholder="WLN-001"></label>
+            <label class="grid gap-1"><span class="muted text-sm">Nama</span><input name="nama" required></label>
+            <label class="grid gap-1"><span class="muted text-sm">HP (WA)</span><input name="hp" placeholder="08xxxxxxxxxx"></label>
+            <label class="grid gap-1"><span class="muted text-sm">Alamat</span><textarea name="alamat" rows="2"></textarea></label>
+            <label class="grid gap-1"><span class="muted text-sm">Paket</span><input name="paket" placeholder="20Mbps"></label>
+            <label class="grid gap-1"><span class="muted text-sm">Harga</span><input name="harga" type="number" required placeholder="150000"></label>
+            <div class="flex gap-2">
+              <button class="btn" type="submit"><i class="fa fa-save mr-2"></i>Simpan</button>
+              <button id="resetPelanggan" class="btn-ghost" type="button">Reset</button>
+            </div>
+          </form>
+
+          <div>
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <h3 class="font-semibold">Daftar</h3>
+              <input id="cariPelanggan" class="w-48 md:w-64" placeholder="Cari ID/nama/HP...">
+            </div>
+            <div id="listPelanggan" class="grid gap-2"></div>
+          </div>
+        </div>
+        <p class="text-xs muted mt-2">CSV header: <code>ID Pelanggan</code>, <code>Nama</code>, <code>Alamat</code>, <code>No HP</code>, <code>Paket</code>, <code>Harga</code>.</p>
+      </section>
+
+      <section id="panel-tagihan" class="card p-4 hidden">
+        <h2 class="text-lg font-semibold mb-3">Tagihan</h2>
+        <div class="flex flex-wrap gap-2 mb-2">
+          <button id="btnGenerateBulanIni" class="btn-ghost"><i class="fa fa-rotate mr-2"></i>Generate Bulan Ini</button>
+        </div>
+        <form id="formTagihan" class="grid md:grid-cols-5 gap-2 items-end">
+          <label class="grid gap-1 md:col-span-2"><span class="muted text-sm">Pelanggan</span><select name="pelangganId" required></select></label>
+          <label class="grid gap-1"><span class="muted text-sm">Periode</span><input type="month" name="periode" required></label>
+          <label class="grid gap-1"><span class="muted text-sm">Nominal</span><input type="number" name="nominal" required></label>
+          <button class="btn md:col-span-1" type="submit"><i class="fa fa-plus mr-2"></i>Buat</button>
+        </form>
+
+        <div class="flex items-center justify-between gap-2 mt-3 mb-2">
+          <h3 class="font-semibold">Aktif</h3>
+          <input id="cariTagihan" class="w-48 md:w-64" placeholder="Cari ID/nama/periode...">
+        </div>
+        <div id="listTagihan" class="grid gap-2"></div>
+      </section>
+
+      <section id="panel-pembayaran" class="card p-4 hidden">
+        <h2 class="text-lg font-semibold mb-3">Pembayaran</h2>
+        <form id="formPembayaran" class="grid md:grid-cols-5 gap-2 items-end">
+          <label class="grid gap-1 md:col-span-2"><span class="muted text-sm">Tagihan</span><select name="tagihanId" required></select></label>
+          <label class="grid gap-1"><span class="muted text-sm">Tanggal</span><input type="date" name="tanggal" required></label>
+          <label class="grid gap-1"><span class="muted text-sm">Jumlah</span><input type="number" name="jumlah" required></label>
+          <button class="btn md:col-span-1" type="submit"><i class="fa fa-money-bill mr-2"></i>Simpan</button>
+        </form>
+
+        <div class="flex items-center justify-between gap-2 mt-3 mb-2">
+          <h3 class="font-semibold">Riwayat</h3>
+          <input id="cariPembayaran" class="w-48 md:w-64" placeholder="Cari ID/nama/periode...">
+        </div>
+        <div id="listPembayaran" class="grid gap-2"></div>
+      </section>
+
+      <section id="panel-laporan" class="card p-4 hidden">
+        <h2 class="text-lg font-semibold mb-3">Laporan</h2>
+        <div class="grid md:grid-cols-4 gap-2 items-end">
+          <label class="grid gap-1 md:col-span-2"><span class="muted text-sm">Periode</span><input type="month" id="periodeLaporan" required></label>
+          <button id="btnRekap" class="btn">Tampilkan</button>
+          <div class="flex gap-2">
+            <button id="btnCetak" class="btn-ghost">Cetak</button>
+            <button id="btnUnduhCSV" class="btn-ghost">CSV</button>
+          </div>
+        </div>
+        <div id="wrapRekap" class="overflow-auto mt-3">
+          <table class="min-w-full text-sm"><thead><tr class="text-left"><th class="p-2">ID</th><th class="p-2">Nama</th><th class="p-2">Periode</th><th class="p-2">Nominal</th><th class="p-2">Status</th></tr></thead><tbody id="tabelRekap"></tbody></table>
+        </div>
+      </section>
+
+      <section id="panel-setting" class="card p-4 hidden">
+        <h2 class="text-lg font-semibold mb-3">Setting</h2>
+        <div class="grid md:grid-cols-3 gap-3">
+          <label class="grid gap-1"><span class="muted text-sm">Nama Operator</span><input id="operatorName" placeholder="Mis: Khan"></label>
+          <button id="saveOperator" class="btn self-end">Simpan</button>
+        </div>
+        <div class="mt-3 text-sm muted">Brand: <span id="brand"></span></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- CUSTOMER APP -->
+  <section id="screen-customer" class="hidden">
+    <div class="max-w-3xl mx-auto px-4 py-6 grid gap-4">
+      <div class="card p-4">
+        <h2 class="text-lg font-semibold">Tagihan Saya</h2>
+        <div id="listTagihanCustomer" class="grid gap-2 mt-3"></div>
+      </div>
+      <div class="card p-4">
+        <h2 class="text-lg font-semibold">Riwayat Pembayaran</h2>
+        <div id="listPembayaranCustomer" class="grid gap-2 mt-3"></div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const $ = (s,el=document)=>el.querySelector(s);
+    const $$ = (s,el=document)=>Array.from(el.querySelectorAll(s));
+    const cfg = window.APP_CONFIG;
+    $("#brand").textContent = cfg.BRAND;
+    $("#operatorLabel").textContent = "";
+
+    // PWA Install
+    let deferredPrompt; 
+    window.addEventListener("beforeinstallprompt", e=>{e.preventDefault(); deferredPrompt=e; $("#btnInstall").onclick=async()=>{deferredPrompt.prompt(); await deferredPrompt.userChoice;};});
+
+    // API helper
+    async function api(path, body={}){
+      const headers = {"Content-Type":"application/json","X-API-KEY": cfg.API_KEY};
+      const session = JSON.parse(localStorage.getItem("session")||"{}");
+      if(session.role){ headers["X-ROLE"]=session.role; headers["X-USER"]=session.user||""; }
+      const res = await fetch(cfg.API_BASE+path, { method:"POST", headers, body: JSON.stringify(body) });
+      if(!res.ok) throw new Error(await res.text());
+      return res.json();
+    }
+    const fmtRp = n => Number(n||0).toLocaleString("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0});
+
+    // State
+    let pelanggan=[], tagihan=[], pembayaran=[];
+    let clientVersion = 0;
+    let chart;
+    let session = null; // {role: "admin"|"operator"|"viewer"|"customer", user, pelangganId?}
+
+    // LOGIN
+    $("#formLogin").addEventListener("submit", async(e)=>{
+      e.preventDefault();
+      $("#loginError").textContent = "";
+      const code = $("#loginCode").value.trim();
+      try{
+        const res = await api("?op=login", { code });
+        session = res.session; // {role,user,pelangganId?}
+        localStorage.setItem("session", JSON.stringify(session));
+        if(session.role==="customer"){
+          // render customer portal
+          $("#screen-login").classList.add("hidden");
+          $("#screen-customer").classList.remove("hidden");
+          await loadCustomerData(session.pelangganId);
+        }else{
+          // render admin/operator
+          $("#operatorLabel").textContent = `${session.role.toUpperCase()} • ${session.user||""}`;
+          $("#screen-login").classList.add("hidden");
+          $("#screen-admin").classList.remove("hidden");
+          await initAdmin();
+        }
+      }catch(err){
+        $("#loginError").textContent = "Kode salah atau tidak dikenal.";
+      }
+    });
+
+    // Admin app
+    const defaultTab = "dashboard";
+    function switchTab(id){
+      $$(".tab").forEach(b=>b.classList.remove("active"));
+      $(`.tab[data-tab="${id}"]`).classList.add("active");
+      ["dashboard","pelanggan","tagihan","pembayaran","laporan","setting"].forEach(x=>{
+        const el = $("#panel-"+x); if(!el) return; el.classList.toggle("hidden", x!==id);
+      });
+    }
+    $$(".tab").forEach(b=> b.addEventListener("click", ()=> switchTab(b.dataset.tab)));
+
+    async function fetchVersion(){ try{ const v=await api("?op=version"); return Number(v.dataVersion||0); }catch(e){ return clientVersion; } }
+    function nowStr(){ const d=new Date(); return d.toLocaleString("id-ID"); }
+
+    async function bootstrap(){
+      const data = await api("?op=bootstrap");
+      pelanggan = data.pelanggan||[]; tagihan = data.tagihan||[]; pembayaran = data.pembayaran||[];
+      $("#lastSync").textContent = nowStr(); renderAll();
+    }
+    async function initAdmin(){
+      switchTab(defaultTab);
+      await bootstrap();
+      clientVersion = await fetchVersion();
+      startPolling();
+    }
+    function startPolling(){ setInterval(async()=>{ try{ const v=await fetchVersion(); if(v>clientVersion){ await bootstrap(); clientVersion=v; } }catch(e){} }, 12000); }
+
+    function renderAll(){
+      $("#statPelanggan").textContent = pelanggan.length;
+      $("#statTagihan").textContent = tagihan.filter(t=>t.status!=="LUNAS").length;
+      const bulanIni = new Date().toISOString().slice(0,7);
+      const tertagih = pembayaran.filter(p=> (p.periode||"").startsWith(bulanIni)).reduce((a,b)=>a+Number(b.jumlah||0),0);
+      $("#statTertagih").textContent = fmtRp(tertagih);
+
+      // selects
+      const sel = $("#formTagihan select[name='pelangganId']"); sel.innerHTML = pelanggan.map(p=>`<option value="${p.id}">${p.id} • ${p.nama} (${p.hp||"-"})</option>`).join("");
+      const selTag = $("#formPembayaran select[name='tagihanId']"); selTag.innerHTML = tagihan.map(t=>`<option value="${t.id}">#${t.id} • ${t.pelangganId} • ${t.periode} • ${fmtRp(t.nominal)}</option>`).join("");
+
+      renderPelanggan(); renderTagihan(); renderPembayaran(); renderChart();
+    }
+
+    function renderChart(){
+      const ctx = $("#chartBulanan").getContext("2d");
+      const byMonth = {}; pembayaran.forEach(p=>{const m=String(p.periode||"").slice(0,7); if(!m) return; byMonth[m]=(byMonth[m]||0)+Number(p.jumlah||0);});
+      const labels = Object.keys(byMonth).sort(); const data = labels.map(k=>byMonth[k]);
+      if(chart){ chart.destroy(); }
+      chart = new Chart(ctx, { type:"bar", data:{labels, datasets:[{label:"Tertagih", data}]}, options:{responsive:true, scales:{y:{ticks:{callback:v=>fmtRp(v)}}}} });
+    }
+
+    function findNama(id){ const p=pelanggan.find(x=>String(x.id)===String(id)); return p? p.nama:"?"; }
+
+    // Pelanggan CRUD (Admin)
+    $("#formPelanggan").addEventListener("submit", async(e)=>{
+      e.preventDefault();
+      const f = new FormData(e.target); const payload = Object.fromEntries(f.entries());
+      await api("?op=savePelanggan", payload);
+      clientVersion = await fetchVersion(); await bootstrap(); e.target.reset();
+    });
+    $("#resetPelanggan").addEventListener("click", ()=>{ $("#formPelanggan").reset(); });
+
+    function renderPelanggan(){
+      const q = ($("#cariPelanggan").value||"").toLowerCase();
+      const wrap = $("#listPelanggan"); wrap.innerHTML="";
+      pelanggan.filter(p=> (p.id||"").toLowerCase().includes(q) || (p.nama||"").toLowerCase().includes(q) || (p.hp||"").includes(q))
+      .forEach(p=>{
+        const div=document.createElement("div"); div.className="rounded-xl border border-white/10 p-3";
+        div.innerHTML=`
+          <div class="flex items-center justify-between">
+            <div><b>${p.id}</b> • ${p.nama} <span class="text-xs muted ml-2">${p.hp||"-"}</span></div>
+            <div class="flex gap-2">
+              <button class="btn-ghost px-2" data-act="edit"><i class="fa fa-pen"></i></button>
+              <button class="btn-ghost px-2" data-act="bill"><i class="fa fa-file-invoice"></i></button>
+              <button class="btn-ghost px-2" data-act="del"><i class="fa fa-trash"></i></button>
+            </div>
+          </div>
+          <div class="text-sm muted mt-1">${p.alamat||""}</div>
+          <div class="text-sm mt-1 flex flex-wrap gap-2">
+            <span class="px-2 py-0.5 rounded bg-white/5 border border-white/10">${p.paket||""}</span>
+            ${p.harga?`<span class="px-2 py-0.5 rounded bg-white/5 border border-white/10">Harga: ${fmtRp(p.harga)}</span>`:""}
+          </div>`;
+        div.querySelector("[data-act='edit']").onclick=()=>{
+          for(const k of ["id","nama","hp","alamat","paket","harga"]){ const el=$(`#formPelanggan [name='${k}']`); if(el) el.value = p[k]||""; }
+          switchTab("pelanggan");
+        };
+        div.querySelector("[data-act='bill']").onclick=()=>{ switchTab("tagihan"); $("#formTagihan select[name='pelangganId']").value = p.id; };
+        div.querySelector("[data-act='del']").onclick=async()=>{
+          if(confirm("Hapus pelanggan ini?")){ await api("?op=deletePelanggan",{id:p.id}); clientVersion=await fetchVersion(); await bootstrap(); }
+        };
+        wrap.appendChild(div);
+      });
+    }
+    $("#cariPelanggan").addEventListener("input", renderPelanggan);
+
+    // CSV helpers (Admin)
+    function normalizeHeader(h){ return String(h||"").toLowerCase().replace(/[^a-z0-9]+/g,"").trim(); }
+    function parseCSV(text){
+      const lines = text.split(/\r?\n/).filter(l=>l.trim()!=="");
+      if(lines.length===0) return {headers:[], rows:[]};
+      const headers = lines[0].split(",").map(h=>h.trim());
+      const rows = lines.slice(1).map(line=>{
+        const cols = line.split(","); const obj={};
+        headers.forEach((h,i)=> obj[h]= (cols[i]||"").trim());
+        return obj;
+      });
+      return {headers, rows};
+    }
+    function pelangganToCSVRows(arr){
+      const headers = ["ID Pelanggan","Nama","Alamat","No HP","Paket","Harga"];
+      const rows = arr.map(p=>[p.id||"", p.nama||"", p.alamat||"", p.hp||"", p.paket||"", p.harga||""]);
+      return [headers.join(","), ...rows.map(r=>r.join(","))].join("\n");
+    }
+    $("#btnExportPelanggan").addEventListener("click", async()=>{
+      const d = await api("?op=exportPelanggan");
+      const csv = pelangganToCSVRows(d.rows||[]);
+      const blob = new Blob([csv], {type:"text/csv"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pelanggan.csv"; a.click();
+    });
+    $("#btnTemplatePelanggan").addEventListener("click", ()=>{
+      const csv = "ID Pelanggan,Nama,Alamat,No HP,Paket,Harga\n";
+      const blob = new Blob([csv], {type:"text/csv"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="template-pelanggan.csv"; a.click();
+    });
+    $("#fileImportPelanggan").addEventListener("change", async(e)=>{
+      const f = e.target.files[0]; if(!f) return;
+      const text = await f.text();
+      const {headers, rows} = parseCSV(text);
+      if(headers.length===0){ alert("CSV kosong / header tidak ditemukan."); return; }
+      const map = {}; headers.forEach(h=>{
+        const n = normalizeHeader(h);
+        if(n==="idpelanggan"||n==="id") map.id = h;
+        else if(n==="nama") map.nama = h;
+        else if(n==="alamat") map.alamat = h;
+        else if(n==="nohp"||n==="hp"||n==="nomorhp") map.hp = h;
+        else if(n==="paket") map.paket = h;
+        else if(n==="harga") map.harga = h;
+      });
+      const payload = rows.map(r=>({
+        id: r[map.id], nama: r[map.nama]||"", alamat: r[map.alamat]||"", hp: r[map.hp]||"", paket: r[map.paket]||"", harga: r[map.harga]||""
+      })).filter(x=>x.id);
+      if(payload.length===0){ alert("Tidak ada baris dengan ID Pelanggan."); return; }
+      await api("?op=importPelanggan",{rows: payload});
+      clientVersion = await fetchVersion(); await bootstrap(); alert("Import selesai."); e.target.value="";
+    });
+
+    // Tagihan (Admin)
+    $("#btnGenerateBulanIni").addEventListener("click", async()=>{
+      await api("?op=generateBulanIni"); await bootstrap(); alert("Tagihan bulan ini dibuat (yang belum ada).");
+    });
+    $("#formTagihan").addEventListener("submit", async(e)=>{
+      e.preventDefault();
+      const f = new FormData(e.target); const payload = Object.fromEntries(f.entries());
+      await api("?op=buatTagihan", payload); clientVersion = await fetchVersion(); await bootstrap(); e.target.reset();
+    });
+    function renderTagihan(){
+      const q = ($("#cariTagihan").value||"").toLowerCase();
+      const wrap = $("#listTagihan"); wrap.innerHTML="";
+      tagihan.filter(t=> (String(t.pelangganId)||"").toLowerCase().includes(q) || (findNama(t.pelangganId)||"").toLowerCase().includes(q) || (t.periode||"").includes(q) )
+      .forEach(t=>{
+        const div=document.createElement("div"); div.className="rounded-xl border border-white/10 p-3";
+        div.innerHTML=`
+          <div class="flex items-center justify-between">
+            <div><b>${t.pelangganId}</b> • ${findNama(t.pelangganId)} <span class="text-xs muted ml-2">${t.periode}</span></div>
+            <div class="flex gap-2">
+              <span class="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-xs">${t.status||"BELUM BAYAR"}</span>
+              <button class="btn-ghost px-2" data-act="pay"><i class="fa fa-money-bill"></i></button>
+              <button class="btn-ghost px-2" data-act="done"><i class="fa fa-check"></i></button>
+              <button class="btn-ghost px-2" data-act="del"><i class="fa fa-trash"></i></button>
+            </div>
+          </div>
+          <div class="text-sm mt-1"><b>${fmtRp(t.nominal)}</b> — ${t.keterangan||""}</div>`;
+        div.querySelector("[data-act='pay']").onclick=()=>{ switchTab("pembayaran"); $("#formPembayaran select[name='tagihanId']").value = t.id; };
+        div.querySelector("[data-act='done']").onclick=async()=>{ await api("?op=setLunas",{id:t.id}); clientVersion=await fetchVersion(); await bootstrap(); };
+        div.querySelector("[data-act='del']").onclick=async()=>{
+          if(confirm("Hapus tagihan ini?")){ await api("?op=deleteTagihan",{id:t.id}); clientVersion=await fetchVersion(); await bootstrap(); }
+        };
+        wrap.appendChild(div);
+      });
+    }
+    $("#cariTagihan").addEventListener("input", renderTagihan);
+
+    // Pembayaran (Admin)
+    $("#formPembayaran").addEventListener("submit", async(e)=>{
+      e.preventDefault();
+      const f = new FormData(e.target); const payload = Object.fromEntries(f.entries());
+      await api("?op=bayar", payload); clientVersion = await fetchVersion(); await bootstrap(); e.target.reset();
+    });
+    function renderPembayaran(){
+      const q = ($("#cariPembayaran").value||"").toLowerCase();
+      const wrap = $("#listPembayaran"); wrap.innerHTML="";
+      pembayaran.filter(p=> (String(p.pelangganId)||"").toLowerCase().includes(q) || (findNama(p.pelangganId)||"").toLowerCase().includes(q) || (p.periode||"").includes(q) )
+      .forEach(p=>{
+        const div=document.createElement("div"); div.className="rounded-xl border border-white/10 p-3";
+        div.innerHTML=`
+          <div class="flex items-center justify-between">
+            <div><b>${p.pelangganId}</b> • ${findNama(p.pelangganId)} <span class="text-xs muted ml-2">${p.periode}</span></div>
+            <div class="text-sm">${new Date(p.tanggal).toLocaleDateString("id-ID")} • ${p.metode||"-"}</div>
+          </div>
+          <div class="text-sm mt-1"><b>${fmtRp(p.jumlah)}</b></div>`;
+        wrap.appendChild(div);
+      });
+    }
+    $("#cariPembayaran").addEventListener("input", renderPembayaran);
+
+    // Laporan (Admin)
+    $("#btnRekap").addEventListener("click", async()=>{
+      const ym = $("#periodeLaporan").value; if(!ym) return alert("Pilih periode.");
+      const res = await api("?op=rekapPeriode",{periode: ym}); const rows = res.rows || [];
+      const tbody = $("#tabelRekap"); tbody.innerHTML="";
+      rows.forEach(r=>{ const tr=document.createElement("tr"); tr.innerHTML = `<td class="p-2">${r.id||""}</td><td class="p-2">${r.nama}</td><td class="p-2">${r.periode}</td><td class="p-2">${fmtRp(r.nominal)}</td><td class="p-2">${r.status}</td>`; tbody.appendChild(tr); });
+    });
+    $("#btnCetak").addEventListener("click", ()=> window.print());
+    $("#btnUnduhCSV").addEventListener("click", async()=>{
+      const ym = $("#periodeLaporan").value; if(!ym) return alert("Pilih periode.");
+      const res = await api("?op=rekapPeriode",{periode: ym}); const rows = res.rows || [];
+      const csv = ["ID,Nama,Periode,Nominal,Status"].concat(rows.map(r=>[r.id||"",r.nama,r.periode,r.nominal,r.status].join(","))).join("\n");
+      const blob = new Blob([csv], {type:"text/csv"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`rekap-${ym}.csv`; a.click();
+    });
+
+    // Settings
+    $("#saveOperator").addEventListener("click", ()=>{ const name=$("#operatorName").value.trim(); if(!name) return; localStorage.setItem("operatorName", name); $("#operatorLabel").textContent = `${(session?.role||"").toUpperCase()} • ${name}`; alert("Tersimpan."); });
+
+    // Customer portal
+    async function loadCustomerData(pelangganId){
+      const data = await api("?op=bootstrap");
+      const tag = (data.tagihan||[]).filter(t=> String(t.pelangganId)===String(pelangganId));
+      const pay = (data.pembayaran||[]).filter(p=> String(p.pelangganId)===String(pelangganId));
+      const pel = (data.pelanggan||[]).find(p=> String(p.id)===String(pelangganId));
+      document.title = `Tagihan ${pel?.nama || pelangganId}`;
+
+      const wrapT = $("#listTagihanCustomer"); wrapT.innerHTML="";
+      tag.forEach(t=>{
+        const div=document.createElement("div"); div.className="rounded-xl border border-white/10 p-3";
+        div.innerHTML = `<div class="flex items-center justify-between"><div><b>${t.periode}</b></div><div class="text-sm"><span class="px-2 py-0.5 rounded bg-white/5 border border-white/10">${t.status}</span></div></div><div class="mt-1"><b>${fmtRp(t.nominal)}</b> — ${t.keterangan||""}</div>`;
+        wrapT.appendChild(div);
+      });
+
+      const wrapP = $("#listPembayaranCustomer"); wrapP.innerHTML="";
+      pay.forEach(p=>{
+        const div=document.createElement("div"); div.className="rounded-xl border border-white/10 p-3";
+        div.innerHTML = `<div class="flex items-center justify-between"><div><b>${new Date(p.tanggal).toLocaleDateString("id-ID")}</b></div><div class="text-sm">${p.metode||"-"}</div></div><div class="mt-1"><b>${fmtRp(p.jumlah)}</b></div>`;
+        wrapP.appendChild(div);
+      });
+    }
+
+    // Service worker
+    if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js')); }
+  </script>
+</body>
+</html>
