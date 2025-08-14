@@ -208,14 +208,16 @@
     window.addEventListener("beforeinstallprompt", e=>{e.preventDefault(); deferredPrompt=e; $("#btnInstall").onclick=async()=>{deferredPrompt.prompt(); await deferredPrompt.userChoice;};});
 
     // API helper
-    async function api(path, body={}){
-      const headers = {"Content-Type":"application/json","X-API-KEY": cfg.API_KEY};
-      const session = JSON.parse(localStorage.getItem("session")||"{}");
-      if(session.role){ headers["X-ROLE"]=session.role; headers["X-USER"]=session.user||""; }
-      const res = await fetch(cfg.API_BASE+path, { method:"POST", headers, body: JSON.stringify(body) });
-      if(!res.ok) throw new Error(await res.text());
-      return res.json();
-    }
+    async function api(path, body = {}) {
+  const session = JSON.parse(localStorage.getItem("session") || "{}");
+  body["X-API-KEY"] = window.APP_CONFIG.API_KEY;
+  if (session.role) { body["X-ROLE"] = session.role; body["X-USER"] = session.user || ""; }
+  const res = await fetch(window.APP_CONFIG.API_BASE + path, {
+    method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body)
+  });
+  if(!res.ok) throw new Error(await res.text());
+  return res.json();
+}
     const fmtRp = n => Number(n||0).toLocaleString("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0});
 
     // State
@@ -497,4 +499,5 @@
   </script>
 </body>
 </html>
+
 
